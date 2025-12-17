@@ -168,7 +168,6 @@
         }
         .btn-cancel:hover { background: rgba(255,255,255,0.2); }
         
-        /* Option buttons for selecting from ClickUp data */
         .option-grid {
             display: flex;
             flex-wrap: wrap;
@@ -308,14 +307,7 @@
         const CLICKUP_API_TOKEN = '__CLICKUP_API_TOKEN__';
         const N8N_WEBHOOK_URL = '__N8N_WEBHOOK_URL__';
         
-        // ClickUp API Base URL
         const CLICKUP_API_BASE = 'https://api.clickup.com/api/v2';
-        
-        // CORS Proxy - Required for browser-based API calls
-        // Options: 
-        // 1. 'https://corsproxy.io/?' (free, public)
-        // 2. 'https://cors-anywhere.herokuapp.com/' (may need activation)
-        // 3. '' (empty = no proxy, use for server-side or if CORS not needed)
         const CORS_PROXY = 'https://corsproxy.io/?';
         // ========================================
 
@@ -325,11 +317,10 @@
         const teamBadge = document.getElementById('teamBadge');
         const chatContainer = document.getElementById('chatContainer');
 
-        // ClickUp Data Cache
         let clickupData = {
             team: null,
             spaces: [],
-            projects: {}, // space_id -> projects array
+            projects: {},
             members: []
         };
 
@@ -384,9 +375,37 @@
             if (enabled) input.focus();
         }
 
-        function isValidDate(str) {
+        // STRICT date validator: format, real date, no past date
+        function isValidDate(str, { allowPast = false } = {}) {
+            if (!str) return false;
             if (str.toLowerCase() === 'skip') return true;
-            return /^\d{4}-\d{2}-\d{2}$/.test(str);
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+
+            const [y, m, d] = str.split('-').map(Number);
+            if (m < 1 || m > 12) return false;
+            if (d < 1 || d > 31) return false;
+
+            const dt = new Date(Date.UTC(y, m - 1, d));
+            if (
+                dt.getUTCFullYear() !== y ||
+                dt.getUTCMonth() + 1 !== m ||
+                dt.getUTCDate() !== d
+            ) {
+                return false;
+            }
+
+            if (!allowPast) {
+                const today = new Date();
+                const todayUTC = new Date(Date.UTC(
+                    today.getUTCFullYear(),
+                    today.getUTCMonth(),
+                    today.getUTCDate()
+                ));
+                if (dt < todayUTC) return false;
+            }
+
+            return true;
         }
 
         function showLoading(text = 'Loading ClickUp data...') {
@@ -406,7 +425,6 @@
             if (overlay) overlay.remove();
         }
 
-        // Helper function to call ClickUp API (with CORS proxy)
         async function clickupAPI(endpoint) {
             const url = CORS_PROXY 
                 ? `${CORS_PROXY}${encodeURIComponent(CLICKUP_API_BASE + endpoint)}`
@@ -428,12 +446,10 @@
             return await response.json();
         }
 
-        // Fetch ClickUp data directly from ClickUp API
         async function fetchClickUpData(showErrors = true) {
             showLoading('Connecting to ClickUp...');
             
             try {
-                // Step 1: Get Teams
                 const teamsData = await clickupAPI('/team');
                 const teams = teamsData.teams || [];
                 
@@ -441,11 +457,9 @@
                     throw new Error('No teams/workspaces found');
                 }
                 
-                // Use first team or find specific one
                 const team = teams.find(t => t.name.includes('Abdullah')) || teams[0];
                 clickupData.team = { id: team.id, name: team.name };
                 
-                // Extract members from team
                 clickupData.members = team.members.map(m => ({
                     id: m.user.id,
                     username: m.user.username,
@@ -454,16 +468,12 @@
                 
                 teamBadge.textContent = `🏢 ${team.name}`;
                 
-                // Step 2: Get Spaces (include all non-archived spaces)
                 const spacesData = await clickupAPI(`/team/${team.id}/space?archived=false`);
                 clickupData.spaces = (spacesData.spaces || []).map(s => ({
                     id: s.id,
                     name: s.name
                 }));
                 
-                console.log('Fetched spaces:', clickupData.spaces);
-                
-                // Step 3: Get Lists (Projects) for each Space
                 clickupData.projects = {};
                 
                 for (const space of clickupData.spaces) {
@@ -474,12 +484,10 @@
                             name: l.name
                         }));
                     } catch (e) {
-                        // Try getting folderless lists
                         clickupData.projects[space.id] = [];
                     }
                 }
                 
-                // Also get lists from folders
                 for (const space of clickupData.spaces) {
                     try {
                         const foldersData = await clickupAPI(`/space/${space.id}/folder`);
@@ -493,15 +501,12 @@
                                 ...folderLists
                             ];
                         }
-                    } catch (e) {
-                        // Folders not available
-                    }
+                    } catch (e) {}
                 }
                 
                 dataLoaded = true;
                 hideLoading();
                 
-                // Show success summary
                 const spaceCount = clickupData.spaces.length;
                 const projectCount = Object.values(clickupData.projects).flat().length;
                 const memberCount = clickupData.members.length;
@@ -704,11 +709,8 @@
 
         async function processInput(value) {
             const trimmed = value.trim();
-            
-            // Ignore if awaiting button selection
             if (awaitingSelection) return;
 
-            // If editing a specific field
             if (isEditMode && editingField) {
                 handleEditInput(trimmed);
                 return;
@@ -717,7 +719,6 @@
             const step = steps[currentStep];
             
             if (!step) {
-                // Restart conversation
                 currentStep = 0;
                 taskData = {};
                 showTyping();
@@ -732,14 +733,29 @@
                 return;
             }
 
-            // Validate dates
-            if ((step.key === 'start_date' || step.key === 'end_date') && !isValidDate(trimmed)) {
-                addMessage("❌ Please enter date as **YYYY-MM-DD** or type 'skip'", 'bot error');
-                return;
+            // Strict date validation
+            if (step.key === 'start_date' || step.key === 'end_date') {
+                if (!isValidDate(trimmed, { allowPast: false })) {
+                    addMessage("❌ Please enter a **valid future date** as **YYYY-MM-DD** (e.g. 2025-12-31) or type 'skip'.\n\nDates like **2025-17-10**, **2025-01-45**, invalid months/days, or past dates are not allowed.", 'bot error');
+                    return;
+                }
             }
 
-            // Store value
             taskData[step.key] = trimmed.toLowerCase() === 'skip' ? null : trimmed;
+
+            // Ensure end_date >= start_date
+            if (step.key === 'end_date' && taskData.start_date && taskData.end_date) {
+                const [sy, sm, sd] = taskData.start_date.split('-').map(Number);
+                const [ey, em, ed] = taskData.end_date.split('-').map(Number);
+                const start = new Date(Date.UTC(sy, sm - 1, sd));
+                const end = new Date(Date.UTC(ey, em - 1, ed));
+                if (end < start) {
+                    addMessage("❌ **End Date** cannot be before **Start Date**. Please enter a later date or type 'skip'.", 'bot error');
+                    taskData.end_date = null;
+                    return;
+                }
+            }
+
             currentStep++;
 
             showTyping();
@@ -752,10 +768,23 @@
         function handleEditInput(trimmed) {
             const step = steps.find(s => s.key === editingField);
             
-            // Validate dates
-            if ((editingField === 'start_date' || editingField === 'end_date') && !isValidDate(trimmed)) {
-                addMessage("❌ Please enter date as **YYYY-MM-DD** or type 'skip'", 'bot error');
-                return;
+            if (editingField === 'start_date' || editingField === 'end_date') {
+                if (!isValidDate(trimmed, { allowPast: false })) {
+                    addMessage("❌ Please enter a **valid future date** as **YYYY-MM-DD** (e.g. 2025-12-31) or type 'skip'.\n\nDates like **2025-17-10**, **2025-01-45**, invalid months/days, or past dates are not allowed.", 'bot error');
+                    return;
+                }
+
+                // If editing end_date, ensure >= start_date
+                if (editingField === 'end_date' && taskData.start_date && trimmed.toLowerCase() !== 'skip') {
+                    const [sy, sm, sd] = taskData.start_date.split('-').map(Number);
+                    const [ey, em, ed] = trimmed.split('-').map(Number);
+                    const start = new Date(Date.UTC(sy, sm - 1, sd));
+                    const end = new Date(Date.UTC(ey, em - 1, ed));
+                    if (end < start) {
+                        addMessage("❌ **End Date** cannot be before **Start Date**. Please enter a later date or type 'skip'.", 'bot error');
+                        return;
+                    }
+                }
             }
             
             taskData[editingField] = trimmed.toLowerCase() === 'skip' ? null : trimmed;
@@ -783,7 +812,6 @@
                 } else if (step.key === 'assignee' && dataLoaded) {
                     showMemberOptions();
                 } else {
-                    // Fallback to text input
                     addMessage(step.question || `Enter **${step.label}**:`);
                     setInput(true, `Enter ${step.label}...`);
                 }
@@ -843,7 +871,6 @@
             const step = steps.find(s => s.key === fieldKey);
             const currentValue = taskData[fieldKey] || 'None';
             
-            // For select fields, show options
             if (step.type === 'select' && dataLoaded) {
                 if (fieldKey === 'space_name') {
                     addMessage(`Current **${step.label}**: ${currentValue}\n\nSelect new value:`);
@@ -885,7 +912,6 @@
             addMessage(spaceName, 'user');
             taskData.space_name = spaceName;
             taskData.space_id = spaceId;
-            // Reset project since space changed
             taskData.project_name = null;
             taskData.project_id = null;
             
@@ -994,7 +1020,6 @@
             setInput(false);
 
             try {
-                // Use CORS proxy for n8n webhook
                 const webhookUrl = CORS_PROXY 
                     ? `${CORS_PROXY}${encodeURIComponent(N8N_WEBHOOK_URL)}`
                     : N8N_WEBHOOK_URL;
@@ -1005,13 +1030,11 @@
                     body: JSON.stringify(taskData)
                 });
 
-                // Handle response - might be text or JSON
                 const responseText = await response.text();
                 let result;
                 try {
                     result = JSON.parse(responseText);
                 } catch (e) {
-                    // If parsing fails, try to extract JSON from the response
                     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
                         result = JSON.parse(jsonMatch[0]);
@@ -1050,7 +1073,6 @@
                 taskData = {};
 
             } catch (error) {
-                // CORS proxy failed, try direct request with no-cors (fire and forget)
                 try {
                     await fetch(N8N_WEBHOOK_URL, {
                         method: 'POST',
@@ -1059,7 +1081,6 @@
                         body: JSON.stringify(taskData)
                     });
                     
-                    // Assume success since n8n workflow is executing
                     let msg = "✅ **Task Request Sent!**\n\n";
                     msg += `<div class="summary-box">`;
                     msg += `<p><strong>Task:</strong> ${taskData.task_name}</p>`;
@@ -1098,7 +1119,6 @@
         sendBtn.addEventListener('click', handleSend);
         input.addEventListener('keypress', e => { if (e.key === 'Enter') handleSend(); });
 
-        // Start - Fetch ClickUp data on load
         setTimeout(() => {
             addMessage("👋 **Welcome to ClickUp Task Bot!**\n\n🔄 Loading your ClickUp data...");
             fetchClickUpData(true);
