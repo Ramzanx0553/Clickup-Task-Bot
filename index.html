@@ -167,7 +167,7 @@
             border: 1px solid rgba(255,255,255,0.2);
         }
         .btn-cancel:hover { background: rgba(255,255,255,0.2); }
-        
+
         .option-grid {
             display: flex;
             flex-wrap: wrap;
@@ -189,27 +189,27 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(157,78,221,0.3);
         }
-        .option-btn.space { 
+        .option-btn.space {
             background: linear-gradient(135deg, rgba(0,184,148,0.4), rgba(0,206,201,0.4));
             border-color: rgba(0,184,148,0.5);
         }
-        .option-btn.space:hover { 
+        .option-btn.space:hover {
             background: linear-gradient(135deg, rgba(0,184,148,0.7), rgba(0,206,201,0.7));
             box-shadow: 0 5px 15px rgba(0,184,148,0.3);
         }
-        .option-btn.project { 
+        .option-btn.project {
             background: linear-gradient(135deg, rgba(253,203,110,0.4), rgba(225,112,85,0.4));
             border-color: rgba(253,203,110,0.5);
         }
-        .option-btn.project:hover { 
+        .option-btn.project:hover {
             background: linear-gradient(135deg, rgba(253,203,110,0.7), rgba(225,112,85,0.7));
             box-shadow: 0 5px 15px rgba(253,203,110,0.3);
         }
-        .option-btn.member { 
+        .option-btn.member {
             background: linear-gradient(135deg, rgba(116,185,255,0.4), rgba(9,132,227,0.4));
             border-color: rgba(116,185,255,0.5);
         }
-        .option-btn.member:hover { 
+        .option-btn.member:hover {
             background: linear-gradient(135deg, rgba(116,185,255,0.7), rgba(9,132,227,0.7));
             box-shadow: 0 5px 15px rgba(116,185,255,0.3);
         }
@@ -220,7 +220,7 @@
         .option-btn.skip:hover {
             background: rgba(255,255,255,0.2);
         }
-        
+
         .edit-options {
             display: flex;
             flex-wrap: wrap;
@@ -252,7 +252,7 @@
             40% { transform: scale(1); }
         }
         a { color: #00d9ff; }
-        
+
         .loading-overlay {
             position: absolute;
             top: 0;
@@ -302,11 +302,11 @@
 
     <script>
         // ========================================
-        // CONFIGURATION (Injected by GitHub Actions from Secrets)
+        // CONFIGURATION (for GitHub Actions injection)
         // ========================================
         const CLICKUP_API_TOKEN = '__CLICKUP_API_TOKEN__';
         const N8N_WEBHOOK_URL = '__N8N_WEBHOOK_URL__';
-        
+
         const CLICKUP_API_BASE = 'https://api.clickup.com/api/v2';
         const CORS_PROXY = 'https://corsproxy.io/?';
         // ========================================
@@ -333,13 +333,18 @@
         let dataLoaded = false;
 
         const steps = [
-            { key: 'space_name', label: 'Space', type: 'select' },
-            { key: 'project_name', label: 'Project', type: 'select' },
-            { key: 'task_name', label: 'Task Name', type: 'text', question: "What should be the **Task Name**?" },
-            { key: 'description', label: 'Description', type: 'text', question: "Enter a **Description** (or type 'skip'):", skippable: true },
-            { key: 'start_date', label: 'Start Date', type: 'text', question: "**Start Date**? (YYYY-MM-DD or 'skip')", skippable: true },
-            { key: 'end_date', label: 'End Date', type: 'text', question: "**End/Due Date**? (YYYY-MM-DD or 'skip')", skippable: true },
-            { key: 'assignee', label: 'Assignee', type: 'select' }
+            { key: 'space_name',        label: 'Space',           type: 'select' },
+            { key: 'project_name',      label: 'Project',         type: 'select' },
+            { key: 'task_name',         label: 'Task Name',       type: 'text',   question: "What should be the **Task Name**?" },
+            { key: 'description',       label: 'Description',     type: 'text',   question: "Enter a **Description** (or type 'skip'):", skippable: true },
+            { key: 'summary',           label: 'Summary',         type: 'text',   question: "Enter **Summary** (custom field) or type 'skip':", skippable: true },
+            { key: 'subtasks',          label: 'Subtasks',        type: 'text',   question: "Enter **Subtasks** separated by commas (or type 'skip'):\nExample: Write draft, Review with client, Send proposal", skippable: true },
+            { key: 'checklist_name',    label: 'Checklist Name',  type: 'text',   question: "Enter **Checklist name** (or type 'skip'):", skippable: true },
+            { key: 'checklist_items',   label: 'Checklist Items', type: 'text',   question: "Enter **Checklist items** separated by commas (or type 'skip'):\nExample: Analyze job, Draft outline, Send proposal", skippable: true },
+            { key: 'attachments',       label: 'Attachments',     type: 'text',   question: "Paste **Attachment URLs** separated by commas (or type 'skip'):\nExample: https://file1, https://file2", skippable: true },
+            { key: 'start_date',        label: 'Start Date',      type: 'text',   question: "**Start Date**? (YYYY-MM-DD or 'skip')", skippable: true },
+            { key: 'end_date',          label: 'End Date',        type: 'text',   question: "**End/Due Date**? (YYYY-MM-DD or 'skip')", skippable: true },
+            { key: 'assignee',          label: 'Assignee',        type: 'select' }
         ];
 
         function addMessage(content, type = 'bot') {
@@ -375,7 +380,6 @@
             if (enabled) input.focus();
         }
 
-        // STRICT date validator: format, real date, no past date
         function isValidDate(str, { allowPast = false } = {}) {
             if (!str) return false;
             if (str.toLowerCase() === 'skip') return true;
@@ -426,10 +430,10 @@
         }
 
         async function clickupAPI(endpoint) {
-            const url = CORS_PROXY 
+            const url = CORS_PROXY
                 ? `${CORS_PROXY}${encodeURIComponent(CLICKUP_API_BASE + endpoint)}`
                 : `${CLICKUP_API_BASE}${endpoint}`;
-            
+
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
@@ -437,45 +441,45 @@
                     'Content-Type': 'application/json'
                 }
             });
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`API Error ${response.status}: ${errorText || response.statusText}`);
             }
-            
+
             return await response.json();
         }
 
         async function fetchClickUpData(showErrors = true) {
             showLoading('Connecting to ClickUp...');
-            
+
             try {
                 const teamsData = await clickupAPI('/team');
                 const teams = teamsData.teams || [];
-                
+
                 if (teams.length === 0) {
                     throw new Error('No teams/workspaces found');
                 }
-                
+
                 const team = teams.find(t => t.name.includes('Abdullah')) || teams[0];
                 clickupData.team = { id: team.id, name: team.name };
-                
+
                 clickupData.members = team.members.map(m => ({
                     id: m.user.id,
                     username: m.user.username,
                     email: m.user.email
                 }));
-                
+
                 teamBadge.textContent = `🏢 ${team.name}`;
-                
+
                 const spacesData = await clickupAPI(`/team/${team.id}/space?archived=false`);
                 clickupData.spaces = (spacesData.spaces || []).map(s => ({
                     id: s.id,
                     name: s.name
                 }));
-                
+
                 clickupData.projects = {};
-                
+
                 for (const space of clickupData.spaces) {
                     try {
                         const listsData = await clickupAPI(`/space/${space.id}/list`);
@@ -483,11 +487,11 @@
                             id: l.id,
                             name: l.name
                         }));
-                    } catch (e) {
+                    } catch {
                         clickupData.projects[space.id] = [];
                     }
                 }
-                
+
                 for (const space of clickupData.spaces) {
                     try {
                         const foldersData = await clickupAPI(`/space/${space.id}/folder`);
@@ -501,28 +505,28 @@
                                 ...folderLists
                             ];
                         }
-                    } catch (e) {}
+                    } catch {}
                 }
-                
+
                 dataLoaded = true;
                 hideLoading();
-                
+
                 const spaceCount = clickupData.spaces.length;
                 const projectCount = Object.values(clickupData.projects).flat().length;
                 const memberCount = clickupData.members.length;
-                
+
                 addMessage(`✅ **ClickUp Connected!**\n\n📊 **${team.name}**\n• ${spaceCount} Spaces\n• ${projectCount} Projects/Lists\n• ${memberCount} Members\n\n**Select a Space** to create a task:`);
                 showSpaceOptions();
                 return true;
-                
+
             } catch (error) {
                 hideLoading();
                 teamBadge.textContent = '📝 Manual Mode';
                 dataLoaded = false;
-                
+
                 if (showErrors) {
                     let errorMsg = `❌ **Could not connect to ClickUp**\n\n`;
-                    
+
                     if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('CORS')) {
                         errorMsg += `**CORS Error:** Browser blocked the request.\n\n`;
                         errorMsg += `The CORS proxy may be down. Try:\n`;
@@ -533,11 +537,11 @@
                     } else {
                         errorMsg += `**Error:** ${error.message}\n\n`;
                     }
-                    
+
                     errorMsg += `Switching to **Manual Mode**...`;
                     addMessage(errorMsg, 'bot error');
                 }
-                
+
                 setTimeout(() => startConversationManual(), 800);
                 return false;
             }
@@ -551,7 +555,7 @@
             editingField = null;
             awaitingConfirmation = false;
             awaitingSelection = false;
-            
+
             addMessage("🔄 **Loading ClickUp data...**");
             fetchClickUpData(true);
         }
@@ -570,10 +574,10 @@
         function showSpaceOptions() {
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             if (clickupData.spaces.length > 0) {
                 clickupData.spaces.forEach(space => {
                     html += `<button class="option-btn space" onclick="selectSpace('${space.id}', '${escapeHtml(space.name)}')">${space.name}</button>`;
@@ -581,7 +585,7 @@
             } else {
                 html += '<p>No spaces found</p>';
             }
-            
+
             html += '</div>';
             container.innerHTML = html;
             addMessage(container);
@@ -593,7 +597,7 @@
             taskData.space_name = spaceName;
             taskData.space_id = spaceId;
             currentStep = 1;
-            
+
             showTyping();
             setTimeout(() => {
                 hideTyping();
@@ -605,12 +609,12 @@
             addMessage("Great! **Select a Project/List**:");
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             const projects = clickupData.projects[spaceId] || [];
-            
+
             if (projects.length > 0) {
                 projects.forEach(project => {
                     html += `<button class="option-btn project" onclick="selectProject('${project.id}', '${escapeHtml(project.name)}')">${project.name}</button>`;
@@ -620,7 +624,7 @@
                 setInput(true, 'Type project name...');
                 awaitingSelection = false;
             }
-            
+
             html += '</div>';
             container.innerHTML = html;
             addMessage(container);
@@ -632,7 +636,7 @@
             taskData.project_name = projectName;
             taskData.project_id = projectId;
             currentStep = 2;
-            
+
             showTyping();
             setTimeout(() => {
                 hideTyping();
@@ -649,17 +653,17 @@
             addMessage("Who should be **Assigned** to this task?");
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             if (clickupData.members.length > 0) {
                 clickupData.members.forEach(member => {
                     const displayName = member.username || member.email;
                     html += `<button class="option-btn member" onclick="selectMember('${member.id}', '${escapeHtml(displayName)}')">${displayName}</button>`;
                 });
             }
-            
+
             html += `<button class="option-btn skip" onclick="selectMember(null, 'skip')">⏭️ Skip</button>`;
             html += '</div>';
             container.innerHTML = html;
@@ -669,16 +673,15 @@
         function selectMember(memberId, memberName) {
             awaitingSelection = false;
             addMessage(memberName === 'skip' ? 'Skip' : memberName, 'user');
-            
+
             if (memberName !== 'skip') {
                 taskData.assignee = memberName;
                 taskData.assignee_id = memberId;
             } else {
                 taskData.assignee = null;
             }
-            
-            currentStep = 7;
-            
+
+            currentStep = steps.length; // finished
             showTyping();
             setTimeout(() => {
                 hideTyping();
@@ -699,7 +702,7 @@
             awaitingConfirmation = false;
             awaitingSelection = false;
             setInput(true);
-            
+
             if (dataLoaded) {
                 setTimeout(() => startConversation(), 300);
             } else {
@@ -717,7 +720,7 @@
             }
 
             const step = steps[currentStep];
-            
+
             if (!step) {
                 currentStep = 0;
                 taskData = {};
@@ -733,7 +736,6 @@
                 return;
             }
 
-            // Strict date validation
             if (step.key === 'start_date' || step.key === 'end_date') {
                 if (!isValidDate(trimmed, { allowPast: false })) {
                     addMessage("❌ Please enter a **valid future date** as **YYYY-MM-DD** (e.g. 2025-12-31) or type 'skip'.\n\nDates like **2025-17-10**, **2025-01-45**, invalid months/days, or past dates are not allowed.", 'bot error');
@@ -741,9 +743,20 @@
                 }
             }
 
-            taskData[step.key] = trimmed.toLowerCase() === 'skip' ? null : trimmed;
+            let valueToStore = trimmed.toLowerCase() === 'skip' ? null : trimmed;
 
-            // Ensure end_date >= start_date
+            if (step.key === 'subtasks' && valueToStore) {
+                valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+            }
+            if (step.key === 'checklist_items' && valueToStore) {
+                valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+            }
+            if (step.key === 'attachments' && valueToStore) {
+                valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+            }
+
+            taskData[step.key] = valueToStore;
+
             if (step.key === 'end_date' && taskData.start_date && taskData.end_date) {
                 const [sy, sm, sd] = taskData.start_date.split('-').map(Number);
                 const [ey, em, ed] = taskData.end_date.split('-').map(Number);
@@ -767,14 +780,13 @@
 
         function handleEditInput(trimmed) {
             const step = steps.find(s => s.key === editingField);
-            
+
             if (editingField === 'start_date' || editingField === 'end_date') {
                 if (!isValidDate(trimmed, { allowPast: false })) {
                     addMessage("❌ Please enter a **valid future date** as **YYYY-MM-DD** (e.g. 2025-12-31) or type 'skip'.\n\nDates like **2025-17-10**, **2025-01-45**, invalid months/days, or past dates are not allowed.", 'bot error');
                     return;
                 }
 
-                // If editing end_date, ensure >= start_date
                 if (editingField === 'end_date' && taskData.start_date && trimmed.toLowerCase() !== 'skip') {
                     const [sy, sm, sd] = taskData.start_date.split('-').map(Number);
                     const [ey, em, ed] = trimmed.split('-').map(Number);
@@ -786,12 +798,18 @@
                     }
                 }
             }
-            
-            taskData[editingField] = trimmed.toLowerCase() === 'skip' ? null : trimmed;
+
+            let valueToStore = trimmed.toLowerCase() === 'skip' ? null : trimmed;
+
+            if (['subtasks', 'checklist_items', 'attachments'].includes(editingField) && valueToStore) {
+                valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+            }
+
+            taskData[editingField] = valueToStore;
             isEditMode = false;
             editingField = null;
-            
-            addMessage(`✅ **${step.label}** updated to: **${trimmed}**`);
+
+            addMessage(`✅ **${step.label}** updated.`);
             setTimeout(() => showSummary(), 500);
         }
 
@@ -802,7 +820,7 @@
             }
 
             const step = steps[currentStep];
-            
+
             if (step.type === 'select') {
                 if (step.key === 'space_name' && dataLoaded) {
                     addMessage("**Select a Space**:");
@@ -834,6 +852,23 @@
                     <p><strong>Project:</strong> ${taskData.project_name || 'Not set'}</p>
                     <p><strong>Task Name:</strong> ${taskData.task_name || 'Not set'}</p>
                     <p><strong>Description:</strong> ${taskData.description || 'None'}</p>
+                    <p><strong>Summary (CF):</strong> ${taskData.summary || 'None'}</p>
+                    <p><strong>Subtasks:</strong> ${
+                        Array.isArray(taskData.subtasks) && taskData.subtasks.length
+                            ? taskData.subtasks.join(', ')
+                            : 'None'
+                    }</p>
+                    <p><strong>Checklist Name:</strong> ${taskData.checklist_name || 'None'}</p>
+                    <p><strong>Checklist Items:</strong> ${
+                        Array.isArray(taskData.checklist_items) && taskData.checklist_items.length
+                            ? taskData.checklist_items.join(', ')
+                            : 'None'
+                    }</p>
+                    <p><strong>Attachments:</strong> ${
+                        Array.isArray(taskData.attachments) && taskData.attachments.length
+                            ? taskData.attachments.join(', ')
+                            : 'None'
+                    }</p>
                     <p><strong>Start Date:</strong> ${taskData.start_date || 'None'}</p>
                     <p><strong>End Date:</strong> ${taskData.end_date || 'None'}</p>
                     <p><strong>Assignee:</strong> ${taskData.assignee || 'None'}</p>
@@ -867,10 +902,16 @@
             isEditMode = true;
             editingField = fieldKey;
             awaitingConfirmation = false;
-            
+
             const step = steps.find(s => s.key === fieldKey);
-            const currentValue = taskData[fieldKey] || 'None';
-            
+            let currentValue = taskData[fieldKey];
+
+            if (Array.isArray(currentValue)) {
+                currentValue = currentValue.join(', ');
+            }
+
+            currentValue = currentValue || 'None';
+
             if (step.type === 'select' && dataLoaded) {
                 if (fieldKey === 'space_name') {
                     addMessage(`Current **${step.label}**: ${currentValue}\n\nSelect new value:`);
@@ -891,14 +932,14 @@
         function showSpaceOptionsForEdit() {
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             clickupData.spaces.forEach(space => {
                 html += `<button class="option-btn space" onclick="selectSpaceEdit('${space.id}', '${escapeHtml(space.name)}')">${space.name}</button>`;
             });
-            
+
             html += `<button class="option-btn skip" onclick="cancelEdit()">← Cancel</button>`;
             html += '</div>';
             container.innerHTML = html;
@@ -914,7 +955,7 @@
             taskData.space_id = spaceId;
             taskData.project_name = null;
             taskData.project_id = null;
-            
+
             addMessage(`✅ **Space** updated. Please also select a new **Project**:`);
             showProjectOptionsForEdit();
         }
@@ -922,12 +963,12 @@
         function showProjectOptionsForEdit() {
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             const projects = clickupData.projects[taskData.space_id] || [];
-            
+
             if (projects.length > 0) {
                 projects.forEach(project => {
                     html += `<button class="option-btn project" onclick="selectProjectEdit('${project.id}', '${escapeHtml(project.name)}')">${project.name}</button>`;
@@ -935,7 +976,7 @@
             } else {
                 html += '<p>No projects in this space</p>';
             }
-            
+
             html += `<button class="option-btn skip" onclick="cancelEdit()">← Cancel</button>`;
             html += '</div>';
             container.innerHTML = html;
@@ -949,7 +990,7 @@
             addMessage(projectName, 'user');
             taskData.project_name = projectName;
             taskData.project_id = projectId;
-            
+
             addMessage(`✅ **Project** updated to: **${projectName}**`);
             setTimeout(() => showSummary(), 500);
         }
@@ -957,15 +998,15 @@
         function showMemberOptionsForEdit() {
             awaitingSelection = true;
             setInput(false, 'Select from options above...');
-            
+
             const container = document.createElement('div');
             let html = '<div class="option-grid">';
-            
+
             clickupData.members.forEach(member => {
                 const displayName = member.username || member.email;
                 html += `<button class="option-btn member" onclick="selectMemberEdit('${member.id}', '${escapeHtml(displayName)}')">${displayName}</button>`;
             });
-            
+
             html += `<button class="option-btn skip" onclick="selectMemberEdit(null, 'none')">⏭️ No Assignee</button>`;
             html += `<button class="option-btn skip" onclick="cancelEdit()">← Cancel</button>`;
             html += '</div>';
@@ -977,7 +1018,7 @@
             awaitingSelection = false;
             isEditMode = false;
             editingField = null;
-            
+
             if (memberName !== 'none') {
                 addMessage(memberName, 'user');
                 taskData.assignee = memberName;
@@ -989,7 +1030,7 @@
                 taskData.assignee_id = null;
                 addMessage(`✅ **Assignee** removed`);
             }
-            
+
             setTimeout(() => showSummary(), 500);
         }
 
@@ -1020,10 +1061,10 @@
             setInput(false);
 
             try {
-                const webhookUrl = CORS_PROXY 
+                const webhookUrl = CORS_PROXY
                     ? `${CORS_PROXY}${encodeURIComponent(N8N_WEBHOOK_URL)}`
                     : N8N_WEBHOOK_URL;
-                
+
                 const response = await fetch(webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1034,7 +1075,7 @@
                 let result;
                 try {
                     result = JSON.parse(responseText);
-                } catch (e) {
+                } catch {
                     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
                     if (jsonMatch) {
                         result = JSON.parse(jsonMatch[0]);
@@ -1068,7 +1109,7 @@
                     errorMsg += "\n\nType anything to try again.";
                     addMessage(errorMsg, 'bot error');
                 }
-                
+
                 currentStep = 0;
                 taskData = {};
 
@@ -1080,7 +1121,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(taskData)
                     });
-                    
+
                     let msg = "✅ **Task Request Sent!**\n\n";
                     msg += `<div class="summary-box">`;
                     msg += `<p><strong>Task:</strong> ${taskData.task_name}</p>`;
@@ -1098,7 +1139,7 @@
                 } catch (e) {
                     addMessage(`❌ **Error:** Could not send request.\n\n${e.message}`, 'bot error');
                 }
-                
+
                 currentStep = 0;
                 taskData = {};
             }
