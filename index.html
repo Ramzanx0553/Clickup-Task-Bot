@@ -329,7 +329,6 @@
       { key: 'project_name',      label: 'Project',         type: 'select' },
       { key: 'task_name',         label: 'Task Name',       type: 'text',   question: "What should be the **Task Name**?" },
       { key: 'description',       label: 'Description',     type: 'text',   question: "Enter a **Description** (or type 'skip'):", skippable: true },
-      { key: 'summary',           label: 'Summary',         type: 'text',   question: "Enter **Summary** (custom field) or type 'skip':", skippable: true },
       { key: 'subtasks',          label: 'Subtasks',        type: 'text',   question: "Enter **Subtasks** separated by commas (or type 'skip'):\nExample: Write draft, Review with client, Send proposal", skippable: true },
       { key: 'checklist_name',    label: 'Checklist Name',  type: 'text',   question: "Enter **Checklist name** (or type 'skip'):", skippable: true },
       { key: 'checklist_items',   label: 'Checklist Items', type: 'text',   question: "Enter **Checklist items** separated by commas (or type 'skip'):\nExample: Analyze job, Draft outline, Send proposal", skippable: true },
@@ -951,8 +950,7 @@
           <p><strong>Project:</strong> ${taskData.project_name || 'Not set'}</p>
           <p><strong>Task Name:</strong> ${taskData.task_name || 'Not set'}</p>
           <p><strong>Description:</strong> ${taskData.description || 'None'}</p>
-          <p><strong>Summary (CF):</strong> ${taskData.summary || 'None'}</p>
-          <p><strong>Custom Fields:</strong> ${cfSummary}</p>
+          ${(taskData.custom_fields && taskData.custom_fields.length) ? `<p><strong>Custom Fields:</strong> ${cfSummary}</p>` : ''}
           <p><strong>Subtasks:</strong> ${
             Array.isArray(taskData.subtasks) && taskData.subtasks.length
               ? taskData.subtasks.join(', ')
@@ -1266,3 +1264,4 @@
   </script>
 </body>
 </html>
+
