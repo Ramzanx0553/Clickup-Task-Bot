@@ -471,61 +471,88 @@
         for (const space of clickupData.spaces) {
           clickupData.projects[space.id] = [];
 
-          // Fetch Lists directly in the space
+          // Fetch Lists directly in the space (including archived=false to get all active lists)
           try {
-            const listsData = await clickupAPI(`/space/${space.id}/list`);
+            const listsData = await clickupAPI(`/space/${space.id}/list?archived=false`);
             const lists = (listsData.lists || []).map(l => ({
               id: l.id,
               name: l.name
             }));
             clickupData.projects[space.id] = [...clickupData.projects[space.id], ...lists];
-          } catch {}
+          } catch (e) {
+            console.warn(`Failed to fetch lists for space ${space.id}:`, e);
+          }
 
-          // Fetch Projects (which contain lists)
+          // Fetch Folders (Projects in ClickUp are often stored as folders)
           try {
-            const projectsData = await clickupAPI(`/space/${space.id}/project`);
-            for (const project of (projectsData.projects || [])) {
-              // Fetch lists within this project
-              try {
-                const projectListsData = await clickupAPI(`/project/${project.id}/list`);
-                const projectLists = (projectListsData.lists || []).map(l => ({
-                  id: l.id,
-                  name: `${project.name} / ${l.name}`
-                }));
-                clickupData.projects[space.id] = [
-                  ...clickupData.projects[space.id],
-                  ...projectLists
-                ];
-              } catch {
-                // If project has lists in the response, use those
-                if (project.lists && project.lists.length > 0) {
-                  const projectLists = project.lists.map(l => ({
+            const foldersData = await clickupAPI(`/space/${space.id}/folder?archived=false`);
+            for (const folder of (foldersData.folders || [])) {
+              // Add folder name as an option (in case it's a project without lists)
+              if (folder.name && !clickupData.projects[space.id].some(p => p.name === folder.name)) {
+                // Only add if it has lists, otherwise it's just a container
+                if (folder.lists && folder.lists.length > 0) {
+                  const folderLists = folder.lists.map(l => ({
                     id: l.id,
-                    name: `${project.name} / ${l.name}`
+                    name: `${folder.name} / ${l.name}`
                   }));
                   clickupData.projects[space.id] = [
                     ...clickupData.projects[space.id],
-                    ...projectLists
+                    ...folderLists
                   ];
+                }
+              } else if (folder.lists && folder.lists.length > 0) {
+                // Folder with lists
+                const folderLists = folder.lists.map(l => ({
+                  id: l.id,
+                  name: `${folder.name} / ${l.name}`
+                }));
+                clickupData.projects[space.id] = [
+                  ...clickupData.projects[space.id],
+                  ...folderLists
+                ];
+              }
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch folders for space ${space.id}:`, e);
+          }
+
+          // Try to fetch Projects separately (if API supports it)
+          try {
+            const projectsData = await clickupAPI(`/space/${space.id}/project?archived=false`);
+            if (projectsData.projects && projectsData.projects.length > 0) {
+              for (const project of projectsData.projects) {
+                // Fetch lists within this project
+                try {
+                  const projectListsData = await clickupAPI(`/project/${project.id}/list?archived=false`);
+                  if (projectListsData.lists && projectListsData.lists.length > 0) {
+                    const projectLists = projectListsData.lists.map(l => ({
+                      id: l.id,
+                      name: `${project.name} / ${l.name}`
+                    }));
+                    clickupData.projects[space.id] = [
+                      ...clickupData.projects[space.id],
+                      ...projectLists
+                    ];
+                  }
+                } catch (e) {
+                  // If project has lists in the response, use those
+                  if (project.lists && project.lists.length > 0) {
+                    const projectLists = project.lists.map(l => ({
+                      id: l.id,
+                      name: `${project.name} / ${l.name}`
+                    }));
+                    clickupData.projects[space.id] = [
+                      ...clickupData.projects[space.id],
+                      ...projectLists
+                    ];
+                  }
                 }
               }
             }
-          } catch {}
-
-          // Fetch Folders (which contain lists)
-          try {
-            const foldersData = await clickupAPI(`/space/${space.id}/folder`);
-            for (const folder of (foldersData.folders || [])) {
-              const folderLists = (folder.lists || []).map(l => ({
-                id: l.id,
-                name: `${folder.name} / ${l.name}`
-              }));
-              clickupData.projects[space.id] = [
-                ...clickupData.projects[space.id],
-                ...folderLists
-              ];
-            }
-          } catch {}
+          } catch (e) {
+            // Projects endpoint might not exist, that's okay
+            console.warn(`Projects endpoint not available for space ${space.id}`);
+          }
         }
 
         dataLoaded = true;
