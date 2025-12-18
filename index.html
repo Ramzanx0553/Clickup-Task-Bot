@@ -324,6 +324,9 @@
     let awaitingCustomFieldValue     = false;
     let currentCustomFieldId         = null;
 
+    // File upload state
+    let uploadedFiles = [];                  // Array of {name, data, type} for base64 files
+
     const steps = [
       { key: 'space_name',        label: 'Space',           type: 'select' },
       { key: 'project_name',      label: 'Project',         type: 'select' },
@@ -332,7 +335,7 @@
       { key: 'subtasks',          label: 'Subtasks',        type: 'text',   question: "Enter **Subtasks** separated by commas (or type 'skip'):\nExample: Write draft, Review with client, Send proposal", skippable: true },
       { key: 'checklist_name',    label: 'Checklist Name',  type: 'text',   question: "Enter **Checklist name** (or type 'skip'):", skippable: true },
       { key: 'checklist_items',   label: 'Checklist Items', type: 'text',   question: "Enter **Checklist items** separated by commas (or type 'skip'):\nExample: Analyze job, Draft outline, Send proposal", skippable: true },
-      { key: 'attachments',       label: 'Attachments',     type: 'text',   question: "Paste **Attachment URLs** separated by commas (or type 'skip'):\nExample: https://file1, https://file2", skippable: true },
+      { key: 'attachments',       label: 'Attachments',     type: 'file',   question: "**Add Attachments**:\n• Upload files using the button below\n• Or paste **URLs** separated by commas\n• Or type 'skip'", skippable: true },
       { key: 'start_date',        label: 'Start Date',      type: 'text',   question: "**Start Date**? (YYYY-MM-DD or 'skip')", skippable: true },
       { key: 'end_date',          label: 'End Date',        type: 'text',   question: "**End/Due Date**? (YYYY-MM-DD or 'skip')", skippable: true },
       { key: 'assignee',          label: 'Assignee',        type: 'select' }
@@ -576,6 +579,7 @@
       awaitingCustomFieldSelection = false;
       awaitingCustomFieldValue     = false;
       currentCustomFieldId         = null;
+      uploadedFiles = [];
 
       addMessage("🔄 **Loading ClickUp data...**");
       fetchClickUpData(true);
@@ -948,6 +952,72 @@
       return text.replace(/'/g, "\\'").replace(/"/g, '\\"');
     }
 
+    function showAttachmentOptions() {
+      const step = steps.find(s => s.key === 'attachments');
+      addMessage(step.question);
+      
+      const container = document.createElement('div');
+      container.innerHTML = `
+        <div style="margin-top: 12px;">
+          <input type="file" id="fileInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+          <button class="action-btn btn-submit" onclick="document.getElementById('fileInput').click()" style="margin-bottom: 10px;">
+            📎 Upload Files
+          </button>
+          <div id="fileList" style="margin-top: 10px; font-size: 0.9rem; color: rgba(255,255,255,0.8);"></div>
+        </div>
+        <p style="margin-top: 12px; font-size: 0.9rem; color: rgba(255,255,255,0.7);">
+          Or paste URLs separated by commas, or type 'skip'
+        </p>
+      `;
+      addMessage(container);
+      setInput(true, 'Paste URLs or click Upload Files...');
+    }
+
+    function handleFileSelect(event) {
+      const files = Array.from(event.target.files);
+      if (files.length === 0) return;
+
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          // Store as base64 data URL
+          uploadedFiles.push({
+            name: file.name,
+            data: e.target.result, // base64 data URL
+            type: file.type,
+            size: file.size
+          });
+          updateFileList();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function updateFileList() {
+      const fileListEl = document.getElementById('fileList');
+      if (!fileListEl) return;
+
+      if (uploadedFiles.length === 0) {
+        fileListEl.innerHTML = '';
+        return;
+      }
+
+      let html = '<strong>📎 Uploaded Files:</strong><br>';
+      uploadedFiles.forEach((file, idx) => {
+        const sizeKB = (file.size / 1024).toFixed(1);
+        html += `<div style="margin: 4px 0; padding: 6px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+          ${file.name} (${sizeKB} KB)
+          <button onclick="removeFile(${idx})" style="margin-left: 8px; padding: 2px 8px; background: rgba(214,48,49,0.5); border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 0.8rem;">✕</button>
+        </div>`;
+      });
+      fileListEl.innerHTML = html;
+    }
+
+    function removeFile(index) {
+      uploadedFiles.splice(index, 1);
+      updateFileList();
+    }
+
     function clearChat() {
       messagesEl.innerHTML = '';
       currentStep = 0;
@@ -963,6 +1033,7 @@
       awaitingCustomFieldSelection = false;
       awaitingCustomFieldValue     = false;
       currentCustomFieldId         = null;
+      uploadedFiles = [];
 
       if (dataLoaded) {
         setTimeout(() => startConversation(), 300);
@@ -1019,7 +1090,12 @@
         valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
       }
       if (step.key === 'attachments' && valueToStore) {
-        valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+        // Combine uploaded files (as URLs) with pasted URLs
+        const urlList = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+        const fileUrls = uploadedFiles.map(f => f.data); // base64 data URLs
+        valueToStore = [...fileUrls, ...urlList].filter(Boolean);
+        // Clear uploaded files after processing
+        uploadedFiles = [];
       }
 
       taskData[step.key] = valueToStore;
@@ -1068,8 +1144,14 @@
 
       let valueToStore = trimmed.toLowerCase() === 'skip' ? null : trimmed;
 
-      if (['subtasks', 'checklist_items', 'attachments'].includes(editingField) && valueToStore) {
+      if (['subtasks', 'checklist_items'].includes(editingField) && valueToStore) {
         valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (editingField === 'attachments' && valueToStore) {
+        const urlList = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+        const fileUrls = uploadedFiles.map(f => f.data);
+        valueToStore = [...fileUrls, ...urlList].filter(Boolean);
+        uploadedFiles = [];
       }
 
       taskData[editingField] = valueToStore;
@@ -1100,6 +1182,9 @@
           addMessage(step.question || `Enter **${step.label}**:`);
           setInput(true, `Enter ${step.label}...`);
         }
+      } else if (step.key === 'attachments') {
+        // Show file upload UI for attachments
+        showAttachmentOptions();
       } else {
         addMessage(step.question);
         setInput(true, `Enter ${step.label}...`);
@@ -1137,7 +1222,13 @@
           }</p>
           <p><strong>Attachments:</strong> ${
             Array.isArray(taskData.attachments) && taskData.attachments.length
-              ? taskData.attachments.join(', ')
+              ? taskData.attachments.map(url => {
+                  // Show file name if it's a base64 data URL, otherwise show the URL
+                  if (url.startsWith('data:')) {
+                    return '📎 [Uploaded File]';
+                  }
+                  return url.length > 50 ? url.substring(0, 50) + '...' : url;
+                }).join(', ')
               : 'None'
           }</p>
           <p><strong>Start Date:</strong> ${taskData.start_date || 'None'}</p>
@@ -1331,6 +1422,30 @@
       setInput(false);
 
       try {
+        // Prepare task data with file attachments
+        const submitData = { ...taskData };
+        
+        // Separate URL attachments from file attachments
+        if (Array.isArray(submitData.attachments)) {
+          const urlAttachments = [];
+          const fileAttachments = [];
+          
+          submitData.attachments.forEach(att => {
+            if (att.startsWith('data:')) {
+              // Base64 file - send as file attachment
+              fileAttachments.push(att);
+            } else if (att.startsWith('http://') || att.startsWith('https://')) {
+              // URL attachment
+              urlAttachments.push(att);
+            }
+          });
+          
+          submitData.attachments = urlAttachments;
+          if (fileAttachments.length > 0) {
+            submitData.file_attachments = fileAttachments; // Separate field for files
+          }
+        }
+
         const webhookUrl = CORS_PROXY
           ? `${CORS_PROXY}${encodeURIComponent(N8N_WEBHOOK_URL)}`
           : N8N_WEBHOOK_URL;
@@ -1338,7 +1453,7 @@
         const response = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(taskData)
+          body: JSON.stringify(submitData)
         });
 
         const responseText = await response.text();
