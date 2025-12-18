@@ -483,25 +483,13 @@
             console.warn(`Failed to fetch lists for space ${space.id}:`, e);
           }
 
-          // Fetch Folders (Projects in ClickUp are often stored as folders)
+          // Fetch Folders (Projects in ClickUp are stored as folders)
           try {
             const foldersData = await clickupAPI(`/space/${space.id}/folder?archived=false`);
             for (const folder of (foldersData.folders || [])) {
-              // Add folder name as an option (in case it's a project without lists)
-              if (folder.name && !clickupData.projects[space.id].some(p => p.name === folder.name)) {
-                // Only add if it has lists, otherwise it's just a container
-                if (folder.lists && folder.lists.length > 0) {
-                  const folderLists = folder.lists.map(l => ({
-                    id: l.id,
-                    name: `${folder.name} / ${l.name}`
-                  }));
-                  clickupData.projects[space.id] = [
-                    ...clickupData.projects[space.id],
-                    ...folderLists
-                  ];
-                }
-              } else if (folder.lists && folder.lists.length > 0) {
-                // Folder with lists
+              // Check if folder has lists in the response
+              if (folder.lists && folder.lists.length > 0) {
+                // Add lists from this folder/project
                 const folderLists = folder.lists.map(l => ({
                   id: l.id,
                   name: `${folder.name} / ${l.name}`
@@ -510,48 +498,28 @@
                   ...clickupData.projects[space.id],
                   ...folderLists
                 ];
-              }
-            }
-          } catch (e) {
-            console.warn(`Failed to fetch folders for space ${space.id}:`, e);
-          }
-
-          // Try to fetch Projects separately (if API supports it)
-          try {
-            const projectsData = await clickupAPI(`/space/${space.id}/project?archived=false`);
-            if (projectsData.projects && projectsData.projects.length > 0) {
-              for (const project of projectsData.projects) {
-                // Fetch lists within this project
+              } else {
+                // Folder might not have lists in response, try fetching lists for this folder
                 try {
-                  const projectListsData = await clickupAPI(`/project/${project.id}/list?archived=false`);
-                  if (projectListsData.lists && projectListsData.lists.length > 0) {
-                    const projectLists = projectListsData.lists.map(l => ({
+                  const folderListsData = await clickupAPI(`/folder/${folder.id}/list?archived=false`);
+                  if (folderListsData.lists && folderListsData.lists.length > 0) {
+                    const folderLists = folderListsData.lists.map(l => ({
                       id: l.id,
-                      name: `${project.name} / ${l.name}`
+                      name: `${folder.name} / ${l.name}`
                     }));
                     clickupData.projects[space.id] = [
                       ...clickupData.projects[space.id],
-                      ...projectLists
+                      ...folderLists
                     ];
                   }
                 } catch (e) {
-                  // If project has lists in the response, use those
-                  if (project.lists && project.lists.length > 0) {
-                    const projectLists = project.lists.map(l => ({
-                      id: l.id,
-                      name: `${project.name} / ${l.name}`
-                    }));
-                    clickupData.projects[space.id] = [
-                      ...clickupData.projects[space.id],
-                      ...projectLists
-                    ];
-                  }
+                  // If folder has no lists, skip it
+                  console.warn(`Folder ${folder.name} has no lists or couldn't fetch lists:`, e);
                 }
               }
             }
           } catch (e) {
-            // Projects endpoint might not exist, that's okay
-            console.warn(`Projects endpoint not available for space ${space.id}`);
+            console.warn(`Failed to fetch folders for space ${space.id}:`, e);
           }
         }
 
