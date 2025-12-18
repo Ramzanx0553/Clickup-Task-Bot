@@ -469,18 +469,50 @@
         clickupData.projects = {};
 
         for (const space of clickupData.spaces) {
+          clickupData.projects[space.id] = [];
+
+          // Fetch Lists directly in the space
           try {
             const listsData = await clickupAPI(`/space/${space.id}/list`);
-            clickupData.projects[space.id] = (listsData.lists || []).map(l => ({
+            const lists = (listsData.lists || []).map(l => ({
               id: l.id,
               name: l.name
             }));
-          } catch {
-            clickupData.projects[space.id] = [];
-          }
-        }
+            clickupData.projects[space.id] = [...clickupData.projects[space.id], ...lists];
+          } catch {}
 
-        for (const space of clickupData.spaces) {
+          // Fetch Projects (which contain lists)
+          try {
+            const projectsData = await clickupAPI(`/space/${space.id}/project`);
+            for (const project of (projectsData.projects || [])) {
+              // Fetch lists within this project
+              try {
+                const projectListsData = await clickupAPI(`/project/${project.id}/list`);
+                const projectLists = (projectListsData.lists || []).map(l => ({
+                  id: l.id,
+                  name: `${project.name} / ${l.name}`
+                }));
+                clickupData.projects[space.id] = [
+                  ...clickupData.projects[space.id],
+                  ...projectLists
+                ];
+              } catch {
+                // If project has lists in the response, use those
+                if (project.lists && project.lists.length > 0) {
+                  const projectLists = project.lists.map(l => ({
+                    id: l.id,
+                    name: `${project.name} / ${l.name}`
+                  }));
+                  clickupData.projects[space.id] = [
+                    ...clickupData.projects[space.id],
+                    ...projectLists
+                  ];
+                }
+              }
+            }
+          } catch {}
+
+          // Fetch Folders (which contain lists)
           try {
             const foldersData = await clickupAPI(`/space/${space.id}/folder`);
             for (const folder of (foldersData.folders || [])) {
