@@ -656,11 +656,19 @@
       addMessage(projectName, 'user');
       taskData.project_name = projectName;
       taskData.project_id   = projectId;
+      taskData.list_id      = projectId; // Store as list_id for custom fields
       currentStep = 2;
 
       showTyping();
+      addMessage("🔍 Loading custom fields...");
       try {
         await loadCustomFields(projectId);
+      } catch (e) {
+        console.error('Error loading custom fields:', e);
+        addMessage("⚠️ Could not load custom fields. Continuing...");
+        // If custom fields fail to load, continue anyway
+        availableCustomFields = [];
+        startCustomFieldFlow();
       } finally {
         hideTyping();
       }
@@ -673,13 +681,41 @@
       customFieldValuesById = {};
       try {
         const resp = await clickupAPI(`/list/${listId}/field`);
-        const fields = resp.fields || resp.custom_fields || [];
-        availableCustomFields = fields.map(f => ({
-          id:   f.id,
-          name: f.name,
-          type: f.type
-        }));
+        console.log('Custom fields API response:', resp);
+        
+        // ClickUp API returns fields in different possible structures
+        let fields = [];
+        if (Array.isArray(resp)) {
+          fields = resp;
+        } else if (resp.fields && Array.isArray(resp.fields)) {
+          fields = resp.fields;
+        } else if (resp.custom_fields && Array.isArray(resp.custom_fields)) {
+          fields = resp.custom_fields;
+        } else if (resp.data && Array.isArray(resp.data)) {
+          fields = resp.data;
+        }
+        
+        // Filter out system/internal fields and only keep custom fields
+        availableCustomFields = fields
+          .filter(f => {
+            // Keep only actual custom fields (not system fields like type_configuration_custom_id)
+            const type = f.type || '';
+            return type && 
+                   !type.includes('type_configuration') &&
+                   !type.includes('dependency') &&
+                   f.id && 
+                   f.name;
+          })
+          .map(f => ({
+            id:   f.id,
+            name: f.name,
+            type: f.type || 'unknown'
+          }));
+        
+        console.log(`Loaded ${availableCustomFields.length} custom fields for list ${listId}:`, availableCustomFields);
       } catch (e) {
+        console.error(`Failed to load custom fields for list ${listId}:`, e);
+        console.error('Error details:', e.message);
         availableCustomFields = [];
       }
       startCustomFieldFlow();
