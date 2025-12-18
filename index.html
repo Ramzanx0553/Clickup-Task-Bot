@@ -1010,12 +1010,59 @@
           <button onclick="removeFile(${idx})" style="margin-left: 8px; padding: 2px 8px; background: rgba(214,48,49,0.5); border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 0.8rem;">✕</button>
         </div>`;
       });
+      
+      // Add Continue button when files are uploaded
+      html += `<div style="margin-top: 12px;">
+        <button class="action-btn btn-submit" onclick="continueWithAttachments()" style="width: 100%;">
+          ✅ Continue with ${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''}
+        </button>
+        <p style="margin-top: 8px; font-size: 0.85rem; color: rgba(255,255,255,0.6); text-align: center;">
+          Or add more files, paste URLs, or type 'skip'
+        </p>
+      </div>`;
+      
       fileListEl.innerHTML = html;
+      
+      // Ensure input stays enabled
+      setInput(true, 'Add more files, paste URLs, or type "skip"...');
     }
 
     function removeFile(index) {
       uploadedFiles.splice(index, 1);
       updateFileList();
+    }
+
+    function continueWithAttachments() {
+      // Process attachments with uploaded files
+      const step = steps.find(s => s.key === 'attachments');
+      if (!step) return;
+
+      // Combine uploaded files (as base64 data URLs) with any URLs in input
+      const inputValue = input.value.trim();
+      let urlList = [];
+      
+      if (inputValue && inputValue.toLowerCase() !== 'skip') {
+        urlList = inputValue.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      
+      const fileUrls = uploadedFiles.map(f => f.data); // base64 data URLs
+      const allAttachments = [...fileUrls, ...urlList].filter(Boolean);
+      
+      // Store attachments
+      taskData.attachments = allAttachments.length > 0 ? allAttachments : null;
+      
+      // Clear uploaded files and input
+      uploadedFiles = [];
+      input.value = '';
+      
+      // Move to next step
+      currentStep++;
+      
+      showTyping();
+      setTimeout(() => {
+        hideTyping();
+        askNextQuestion();
+      }, 400);
     }
 
     function clearChat() {
@@ -1089,11 +1136,22 @@
       if (step.key === 'checklist_items' && valueToStore) {
         valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
       }
-      if (step.key === 'attachments' && valueToStore) {
-        // Combine uploaded files (as URLs) with pasted URLs
-        const urlList = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+      if (step.key === 'attachments') {
+        // Handle attachments: combine uploaded files with pasted URLs
         const fileUrls = uploadedFiles.map(f => f.data); // base64 data URLs
-        valueToStore = [...fileUrls, ...urlList].filter(Boolean);
+        
+        if (valueToStore) {
+          // User provided URLs - combine with uploaded files
+          const urlList = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
+          valueToStore = [...fileUrls, ...urlList].filter(Boolean);
+        } else if (fileUrls.length > 0) {
+          // User typed 'skip' but has uploaded files - use uploaded files
+          valueToStore = fileUrls;
+        } else {
+          // User typed 'skip' and no files - set to null
+          valueToStore = null;
+        }
+        
         // Clear uploaded files after processing
         uploadedFiles = [];
       }
