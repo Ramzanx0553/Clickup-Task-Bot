@@ -656,13 +656,37 @@
       addMessage(projectName, 'user');
       taskData.project_name = projectName;
       taskData.project_id   = projectId;
-      taskData.list_id      = projectId; // Store as list_id for custom fields
+      
+      // Check if projectName contains " / " which means it's "Folder / List"
+      // If so, extract the list ID. Otherwise, assume projectId is the list ID
+      let listId = projectId;
+      
+      // If the name contains " / ", it's a list inside a folder
+      // The projectId should already be the list ID in this case
+      // But if it's just a folder name, we need to get lists from the folder
+      if (!projectName.includes(' / ')) {
+        // This might be a folder/project, try to get its lists
+        try {
+          const folderListsData = await clickupAPI(`/folder/${projectId}/list?archived=false`);
+          if (folderListsData.lists && folderListsData.lists.length > 0) {
+            // Use the first list from the folder
+            listId = folderListsData.lists[0].id;
+            taskData.project_name = `${projectName} / ${folderListsData.lists[0].name}`;
+            console.log(`Using first list from folder: ${listId}`);
+          }
+        } catch (e) {
+          // Not a folder, or folder has no lists - assume projectId is a list ID
+          console.log(`Assuming ${projectId} is a list ID`);
+        }
+      }
+      
+      taskData.list_id = listId;
       currentStep = 2;
 
       showTyping();
       addMessage("🔍 Loading custom fields...");
       try {
-        await loadCustomFields(projectId);
+        await loadCustomFields(listId);
       } catch (e) {
         console.error('Error loading custom fields:', e);
         addMessage("⚠️ Could not load custom fields. Continuing...");
@@ -680,6 +704,7 @@
       availableCustomFields = [];
       customFieldValuesById = {};
       try {
+        console.log(`Fetching custom fields for list ID: ${listId}`);
         const resp = await clickupAPI(`/list/${listId}/field`);
         console.log('Custom fields API response:', resp);
         
@@ -695,16 +720,25 @@
           fields = resp.data;
         }
         
+        console.log(`Found ${fields.length} total fields (before filtering)`);
+        
         // Filter out system/internal fields and only keep custom fields
         availableCustomFields = fields
           .filter(f => {
-            // Keep only actual custom fields (not system fields like type_configuration_custom_id)
-            const type = f.type || '';
-            return type && 
-                   !type.includes('type_configuration') &&
-                   !type.includes('dependency') &&
-                   f.id && 
-                   f.name;
+            // Keep only actual custom fields (not system fields)
+            const type = (f.type || '').toLowerCase();
+            const isSystemField = 
+              type.includes('type_configuration') ||
+              type.includes('dependency') ||
+              type.includes('automatic_progress') ||
+              !f.id || 
+              !f.name;
+            
+            if (!isSystemField) {
+              console.log(`Keeping custom field: ${f.name} (type: ${f.type})`);
+            }
+            
+            return !isSystemField;
           })
           .map(f => ({
             id:   f.id,
@@ -713,9 +747,14 @@
           }));
         
         console.log(`Loaded ${availableCustomFields.length} custom fields for list ${listId}:`, availableCustomFields);
+        
+        if (availableCustomFields.length === 0 && fields.length > 0) {
+          console.warn('All fields were filtered out. Raw fields:', fields);
+        }
       } catch (e) {
         console.error(`Failed to load custom fields for list ${listId}:`, e);
         console.error('Error details:', e.message);
+        console.error('Full error:', e);
         availableCustomFields = [];
       }
       startCustomFieldFlow();
