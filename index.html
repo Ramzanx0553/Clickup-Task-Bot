@@ -754,6 +754,30 @@
           }
         }
         
+        // Also try fetching from team/workspace level (all custom fields in the workspace)
+        if (clickupData.team && clickupData.team.id) {
+          try {
+            const teamResp = await clickupAPI(`/team/${clickupData.team.id}/field`);
+            console.log('Team-level custom fields API response:', teamResp);
+            
+            let teamFields = [];
+            if (Array.isArray(teamResp)) {
+              teamFields = teamResp;
+            } else if (teamResp.fields && Array.isArray(teamResp.fields)) {
+              teamFields = teamResp.fields;
+            } else if (teamResp.custom_fields && Array.isArray(teamResp.custom_fields)) {
+              teamFields = teamResp.custom_fields;
+            } else if (teamResp.data && Array.isArray(teamResp.data)) {
+              teamFields = teamResp.data;
+            }
+            
+            allFields = [...allFields, ...teamFields];
+            console.log(`Found ${teamFields.length} fields at team/workspace level`);
+          } catch (e) {
+            console.warn('Could not fetch team-level fields:', e);
+          }
+        }
+        
         console.log(`Found ${allFields.length} total fields (before filtering)`);
         
         // Remove duplicates by ID
@@ -808,7 +832,7 @@
 
     function startCustomFieldFlow() {
       if (!availableCustomFields.length) {
-        addMessage("ℹ️ No custom fields found for this list. If you have custom fields in ClickUp, make sure they are attached to the list or space.");
+        addMessage("ℹ️ No custom fields found. The bot checked:\n• List level\n• Space level\n• Workspace level\n\n**Note:** Custom fields must exist in ClickUp first. If you create custom fields in your workspace, they will appear here automatically on next refresh.");
         setTimeout(() => askTaskName(), 500);
         return;
       }
