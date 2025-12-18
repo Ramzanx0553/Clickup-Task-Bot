@@ -703,27 +703,71 @@
     async function loadCustomFields(listId) {
       availableCustomFields = [];
       customFieldValuesById = {};
+      let allFields = [];
+      
       try {
         console.log(`Fetching custom fields for list ID: ${listId}`);
-        const resp = await clickupAPI(`/list/${listId}/field`);
-        console.log('Custom fields API response:', resp);
         
-        // ClickUp API returns fields in different possible structures
-        let fields = [];
-        if (Array.isArray(resp)) {
-          fields = resp;
-        } else if (resp.fields && Array.isArray(resp.fields)) {
-          fields = resp.fields;
-        } else if (resp.custom_fields && Array.isArray(resp.custom_fields)) {
-          fields = resp.custom_fields;
-        } else if (resp.data && Array.isArray(resp.data)) {
-          fields = resp.data;
+        // Try fetching from list level first
+        try {
+          const listResp = await clickupAPI(`/list/${listId}/field`);
+          console.log('List-level custom fields API response:', listResp);
+          
+          let listFields = [];
+          if (Array.isArray(listResp)) {
+            listFields = listResp;
+          } else if (listResp.fields && Array.isArray(listResp.fields)) {
+            listFields = listResp.fields;
+          } else if (listResp.custom_fields && Array.isArray(listResp.custom_fields)) {
+            listFields = listResp.custom_fields;
+          } else if (listResp.data && Array.isArray(listResp.data)) {
+            listFields = listResp.data;
+          }
+          
+          allFields = [...allFields, ...listFields];
+          console.log(`Found ${listFields.length} fields at list level`);
+        } catch (e) {
+          console.warn('Could not fetch list-level fields:', e);
         }
         
-        console.log(`Found ${fields.length} total fields (before filtering)`);
+        // Also try fetching from space level (custom fields can be inherited)
+        if (taskData.space_id) {
+          try {
+            const spaceResp = await clickupAPI(`/space/${taskData.space_id}/field`);
+            console.log('Space-level custom fields API response:', spaceResp);
+            
+            let spaceFields = [];
+            if (Array.isArray(spaceResp)) {
+              spaceFields = spaceResp;
+            } else if (spaceResp.fields && Array.isArray(spaceResp.fields)) {
+              spaceFields = spaceResp.fields;
+            } else if (spaceResp.custom_fields && Array.isArray(spaceResp.custom_fields)) {
+              spaceFields = spaceResp.custom_fields;
+            } else if (spaceResp.data && Array.isArray(spaceResp.data)) {
+              spaceFields = spaceResp.data;
+            }
+            
+            allFields = [...allFields, ...spaceFields];
+            console.log(`Found ${spaceFields.length} fields at space level`);
+          } catch (e) {
+            console.warn('Could not fetch space-level fields:', e);
+          }
+        }
+        
+        console.log(`Found ${allFields.length} total fields (before filtering)`);
+        
+        // Remove duplicates by ID
+        const uniqueFields = [];
+        const seenIds = new Set();
+        for (const field of allFields) {
+          if (field.id && !seenIds.has(field.id)) {
+            seenIds.add(field.id);
+            uniqueFields.push(field);
+          }
+        }
         
         // Filter out system/internal fields and only keep custom fields
-        availableCustomFields = fields
+        availableCustomFields = uniqueFields
           .filter(f => {
             // Keep only actual custom fields (not system fields)
             const type = (f.type || '').toLowerCase();
@@ -748,8 +792,10 @@
         
         console.log(`Loaded ${availableCustomFields.length} custom fields for list ${listId}:`, availableCustomFields);
         
-        if (availableCustomFields.length === 0 && fields.length > 0) {
-          console.warn('All fields were filtered out. Raw fields:', fields);
+        if (availableCustomFields.length === 0 && allFields.length > 0) {
+          console.warn('All fields were filtered out. Raw fields:', allFields);
+        } else if (availableCustomFields.length === 0) {
+          console.warn('No custom fields found. Make sure custom fields are attached to the list or space in ClickUp.');
         }
       } catch (e) {
         console.error(`Failed to load custom fields for list ${listId}:`, e);
@@ -762,7 +808,8 @@
 
     function startCustomFieldFlow() {
       if (!availableCustomFields.length) {
-        askTaskName();
+        addMessage("ℹ️ No custom fields found for this list. If you have custom fields in ClickUp, make sure they are attached to the list or space.");
+        setTimeout(() => askTaskName(), 500);
         return;
       }
 
