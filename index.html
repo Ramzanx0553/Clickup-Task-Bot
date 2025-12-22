@@ -57,9 +57,7 @@
     }
     .clear-btn { right: 20px; }
     .refresh-btn { left: 20px; }
-    .clear-btn:hover, .refresh-btn:hover {
-      background: rgba(255,255,255,0.3);
-    }
+    .clear-btn:hover, .refresh-btn:hover { background: rgba(255,255,255,0.3); }
     .messages {
       height: 450px;
       overflow-y: auto;
@@ -119,10 +117,7 @@
       margin-top: 12px;
       border: 1px solid rgba(255,255,255,0.1);
     }
-    .summary-box p {
-      margin: 8px 0;
-      font-size: 0.95rem;
-    }
+    .summary-box p { margin: 8px 0; font-size: 0.95rem; }
     .summary-box strong { color: #00d9ff; }
     .action-buttons {
       display: flex;
@@ -155,7 +150,6 @@
       border: 1px solid rgba(255,255,255,0.2);
     }
     .btn-cancel:hover { background: rgba(255,255,255,0.2); }
-
     .option-grid {
       display: flex;
       flex-wrap: wrap;
@@ -205,10 +199,7 @@
       background: rgba(255,255,255,0.1);
       border-color: rgba(255,255,255,0.2);
     }
-    .option-btn.skip:hover {
-      background: rgba(255,255,255,0.2);
-    }
-
+    .option-btn.skip:hover { background: rgba(255,255,255,0.2); }
     .edit-options {
       display: flex;
       flex-wrap: wrap;
@@ -240,7 +231,6 @@
       40% { transform: scale(1); }
     }
     a { color: #00d9ff; }
-
     .loading-overlay {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -259,9 +249,7 @@
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text {
       color: white;
       margin-top: 16px;
@@ -345,7 +333,9 @@
       const div = document.createElement('div');
       div.className = `message ${type}`;
       if (typeof content === 'string') {
-        div.innerHTML = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+        div.innerHTML = content
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n/g, '<br>');
       } else {
         div.appendChild(content);
       }
@@ -452,7 +442,10 @@
           throw new Error('No teams/workspaces found');
         }
 
-        const team = teams.find(t => t.name.includes('Abdullah')) || teams[0];
+        // IMPORTANT CHANGE: do NOT force a specific name like "Abdullah"
+        // Always use the first team of the CURRENT token
+        const team = teams[0];
+
         clickupData.team = { id: team.id, name: team.name };
 
         clickupData.members = team.members.map(m => ({
@@ -474,25 +467,26 @@
         for (const space of clickupData.spaces) {
           clickupData.projects[space.id] = [];
 
-          // Fetch Lists directly in the space (including archived=false to get all active lists)
+          // Lists directly in the space
           try {
             const listsData = await clickupAPI(`/space/${space.id}/list?archived=false`);
             const lists = (listsData.lists || []).map(l => ({
               id: l.id,
               name: l.name
             }));
-            clickupData.projects[space.id] = [...clickupData.projects[space.id], ...lists];
+            clickupData.projects[space.id] = [
+              ...clickupData.projects[space.id],
+              ...lists
+            ];
           } catch (e) {
             console.warn(`Failed to fetch lists for space ${space.id}:`, e);
           }
 
-          // Fetch Folders (Projects in ClickUp are stored as folders)
+          // Folders (projects) and their lists
           try {
             const foldersData = await clickupAPI(`/space/${space.id}/folder?archived=false`);
             for (const folder of (foldersData.folders || [])) {
-              // Check if folder has lists in the response
               if (folder.lists && folder.lists.length > 0) {
-                // Add lists from this folder/project
                 const folderLists = folder.lists.map(l => ({
                   id: l.id,
                   name: `${folder.name} / ${l.name}`
@@ -502,7 +496,6 @@
                   ...folderLists
                 ];
               } else {
-                // Folder might not have lists in response, try fetching lists for this folder
                 try {
                   const folderListsData = await clickupAPI(`/folder/${folder.id}/list?archived=false`);
                   if (folderListsData.lists && folderListsData.lists.length > 0) {
@@ -516,7 +509,6 @@
                     ];
                   }
                 } catch (e) {
-                  // If folder has no lists, skip it
                   console.warn(`Folder ${folder.name} has no lists or couldn't fetch lists:`, e);
                 }
               }
@@ -661,29 +653,21 @@
       taskData.project_name = projectName;
       taskData.project_id   = projectId;
       
-      // Check if projectName contains " / " which means it's "Folder / List"
-      // If so, extract the list ID. Otherwise, assume projectId is the list ID
       let listId = projectId;
-      
-      // If the name contains " / ", it's a list inside a folder
-      // The projectId should already be the list ID in this case
-      // But if it's just a folder name, we need to get lists from the folder
+
       if (!projectName.includes(' / ')) {
-        // This might be a folder/project, try to get its lists
         try {
           const folderListsData = await clickupAPI(`/folder/${projectId}/list?archived=false`);
           if (folderListsData.lists && folderListsData.lists.length > 0) {
-            // Use the first list from the folder
             listId = folderListsData.lists[0].id;
             taskData.project_name = `${projectName} / ${folderListsData.lists[0].name}`;
             console.log(`Using first list from folder: ${listId}`);
           }
         } catch (e) {
-          // Not a folder, or folder has no lists - assume projectId is a list ID
           console.log(`Assuming ${projectId} is a list ID`);
         }
       }
-      
+
       taskData.list_id = listId;
       currentStep = 2;
 
@@ -694,7 +678,6 @@
       } catch (e) {
         console.error('Error loading custom fields:', e);
         addMessage("⚠️ Could not load custom fields. Continuing...");
-        // If custom fields fail to load, continue anyway
         availableCustomFields = [];
         startCustomFieldFlow();
       } finally {
@@ -712,7 +695,7 @@
       try {
         console.log(`Fetching custom fields for list ID: ${listId}`);
         
-        // Try fetching from list level first
+        // list-level
         try {
           const listResp = await clickupAPI(`/list/${listId}/field`);
           console.log('List-level custom fields API response:', listResp);
@@ -734,7 +717,7 @@
           console.warn('Could not fetch list-level fields:', e);
         }
         
-        // Also try fetching from space level (custom fields can be inherited)
+        // space-level
         if (taskData.space_id) {
           try {
             const spaceResp = await clickupAPI(`/space/${taskData.space_id}/field`);
@@ -758,7 +741,7 @@
           }
         }
         
-        // Also try fetching from team/workspace level (all custom fields in the workspace)
+        // team-level
         if (clickupData.team && clickupData.team.id) {
           try {
             const teamResp = await clickupAPI(`/team/${clickupData.team.id}/field`);
@@ -784,7 +767,7 @@
         
         console.log(`Found ${allFields.length} total fields (before filtering)`);
         
-        // Remove duplicates by ID
+        // dedupe
         const uniqueFields = [];
         const seenIds = new Set();
         for (const field of allFields) {
@@ -794,10 +777,9 @@
           }
         }
         
-        // Filter out system/internal fields and only keep custom fields
+        // filter
         availableCustomFields = uniqueFields
           .filter(f => {
-            // Keep only actual custom fields (not system fields)
             const type = (f.type || '').toLowerCase();
             const isSystemField = 
               type.includes('type_configuration') ||
@@ -845,7 +827,7 @@
       setInput(false, 'Use buttons below...');
 
       const container = document.createElement('div');
-      let html = '<p>Select a **Custom Field** to fill (or click "Done"):</p>';
+      let html = '<p>Select a **Custom Field** to fill (or click \"Done\"):</p>';
       html += '<div class="option-grid">';
 
       availableCustomFields.forEach(f => {
@@ -900,8 +882,6 @@
       if (!taskData.custom_fields.length) delete taskData.custom_fields;
       askTaskName();
     }
-
-    // ----- Rest of flow -----
 
     function askTaskName() {
       addMessage("What should be the **Task Name**?");
@@ -980,10 +960,9 @@
       files.forEach(file => {
         const reader = new FileReader();
         reader.onload = (e) => {
-          // Store as base64 data URL
           uploadedFiles.push({
             name: file.name,
-            data: e.target.result, // base64 data URL
+            data: e.target.result,
             type: file.type,
             size: file.size
           });
@@ -1011,7 +990,6 @@
         </div>`;
       });
       
-      // Add Continue button when files are uploaded
       html += `<div style="margin-top: 12px;">
         <button class="action-btn btn-submit" onclick="continueWithAttachments()" style="width: 100%;">
           ✅ Continue with ${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''}
@@ -1022,8 +1000,6 @@
       </div>`;
       
       fileListEl.innerHTML = html;
-      
-      // Ensure input stays enabled
       setInput(true, 'Add more files, paste URLs, or type "skip"...');
     }
 
@@ -1033,11 +1009,9 @@
     }
 
     function continueWithAttachments() {
-      // Process attachments with uploaded files
       const step = steps.find(s => s.key === 'attachments');
       if (!step) return;
 
-      // Combine uploaded files (as base64 data URLs) with any URLs in input
       const inputValue = input.value.trim();
       let urlList = [];
       
@@ -1045,19 +1019,13 @@
         urlList = inputValue.split(',').map(s => s.trim()).filter(Boolean);
       }
       
-      const fileUrls = uploadedFiles.map(f => f.data); // base64 data URLs
+      const fileUrls = uploadedFiles.map(f => f.data);
       const allAttachments = [...fileUrls, ...urlList].filter(Boolean);
-      
-      // Store attachments
       taskData.attachments = allAttachments.length > 0 ? allAttachments : null;
-      
-      // Clear uploaded files and input
       uploadedFiles = [];
       input.value = '';
       
-      // Move to next step
       currentStep++;
-      
       showTyping();
       setTimeout(() => {
         hideTyping();
@@ -1137,22 +1105,16 @@
         valueToStore = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
       }
       if (step.key === 'attachments') {
-        // Handle attachments: combine uploaded files with pasted URLs
-        const fileUrls = uploadedFiles.map(f => f.data); // base64 data URLs
+        const fileUrls = uploadedFiles.map(f => f.data);
         
         if (valueToStore) {
-          // User provided URLs - combine with uploaded files
           const urlList = valueToStore.split(',').map(s => s.trim()).filter(Boolean);
           valueToStore = [...fileUrls, ...urlList].filter(Boolean);
         } else if (fileUrls.length > 0) {
-          // User typed 'skip' but has uploaded files - use uploaded files
           valueToStore = fileUrls;
         } else {
-          // User typed 'skip' and no files - set to null
           valueToStore = null;
         }
-        
-        // Clear uploaded files after processing
         uploadedFiles = [];
       }
 
@@ -1241,7 +1203,6 @@
           setInput(true, `Enter ${step.label}...`);
         }
       } else if (step.key === 'attachments') {
-        // Show file upload UI for attachments
         showAttachmentOptions();
       } else {
         addMessage(step.question);
@@ -1281,7 +1242,6 @@
           <p><strong>Attachments:</strong> ${
             Array.isArray(taskData.attachments) && taskData.attachments.length
               ? taskData.attachments.map(url => {
-                  // Show file name if it's a base64 data URL, otherwise show the URL
                   if (url.startsWith('data:')) {
                     return '📎 [Uploaded File]';
                   }
@@ -1480,27 +1440,23 @@
       setInput(false);
 
       try {
-        // Prepare task data with file attachments
         const submitData = { ...taskData };
         
-        // Separate URL attachments from file attachments
         if (Array.isArray(submitData.attachments)) {
           const urlAttachments = [];
           const fileAttachments = [];
           
           submitData.attachments.forEach(att => {
             if (att.startsWith('data:')) {
-              // Base64 file - send as file attachment
               fileAttachments.push(att);
             } else if (att.startsWith('http://') || att.startsWith('https://')) {
-              // URL attachment
               urlAttachments.push(att);
             }
           });
           
           submitData.attachments = urlAttachments;
           if (fileAttachments.length > 0) {
-            submitData.file_attachments = fileAttachments; // Separate field for files
+            submitData.file_attachments = fileAttachments;
           }
         }
 
@@ -1610,4 +1566,3 @@
   </script>
 </body>
 </html>
-
