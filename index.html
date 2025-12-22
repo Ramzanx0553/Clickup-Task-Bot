@@ -277,12 +277,11 @@
     // ========================================
     // CONFIGURATION (for GitHub Actions injection)
     // ========================================
-    //const CLICKUP_API_TOKEN = '__CLICKUP_API_TOKEN__';
-    const CLICKUP_API_TOKEN = 'pk_94595603_0IMLAABUL7809VL53SG85EZR5BNMT4FV';
+    const CLICKUP_API_TOKEN = '__CLICKUP_API_TOKEN__';
     const N8N_WEBHOOK_URL   = '__N8N_WEBHOOK_URL__';
 
     const CLICKUP_API_BASE = 'https://api.clickup.com/api/v2';
-    const CORS_PROXY       = 'https://corsproxy.io/?';
+    const CORS_PROXY       = ''; // direct calls, no proxy
     // ========================================
 
     const messagesEl    = document.getElementById('messages');
@@ -307,14 +306,14 @@
     let dataLoaded = false;
 
     // Custom field state
-    let availableCustomFields = [];          // from ClickUp /list/{id}/field
-    let customFieldValuesById = {};          // { fieldId: {id,name,value} }
+    let availableCustomFields = [];
+    let customFieldValuesById = {};
     let awaitingCustomFieldSelection = false;
     let awaitingCustomFieldValue     = false;
     let currentCustomFieldId         = null;
 
     // File upload state
-    let uploadedFiles = [];                  // Array of {name, data, type} for base64 files
+    let uploadedFiles = [];
 
     const steps = [
       { key: 'space_name',        label: 'Space',           type: 'select' },
@@ -413,9 +412,7 @@
     }
 
     async function clickupAPI(endpoint) {
-      const url = CORS_PROXY
-        ? `${CORS_PROXY}${encodeURIComponent(CLICKUP_API_BASE + endpoint)}`
-        : `${CLICKUP_API_BASE}${endpoint}`;
+      const url = `${CLICKUP_API_BASE}${endpoint}`;
 
       const response = await fetch(url, {
         method: 'GET',
@@ -443,8 +440,6 @@
           throw new Error('No teams/workspaces found');
         }
 
-        // IMPORTANT CHANGE: do NOT force a specific name like "Abdullah"
-        // Always use the first team of the CURRENT token
         const team = teams[0];
 
         clickupData.team = { id: team.id, name: team.name };
@@ -468,7 +463,6 @@
         for (const space of clickupData.spaces) {
           clickupData.projects[space.id] = [];
 
-          // Lists directly in the space
           try {
             const listsData = await clickupAPI(`/space/${space.id}/list?archived=false`);
             const lists = (listsData.lists || []).map(l => ({
@@ -483,7 +477,6 @@
             console.warn(`Failed to fetch lists for space ${space.id}:`, e);
           }
 
-          // Folders (projects) and their lists
           try {
             const foldersData = await clickupAPI(`/space/${space.id}/folder?archived=false`);
             for (const folder of (foldersData.folders || [])) {
@@ -538,11 +531,8 @@
         if (showErrors) {
           let errorMsg = `❌ **Could not connect to ClickUp**\n\n`;
 
-          if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('CORS')) {
-            errorMsg += `**CORS Error:** Browser blocked the request.\n\n`;
-            errorMsg += `The CORS proxy may be down. Try:\n`;
-            errorMsg += `• Refreshing the page\n`;
-            errorMsg += `• Using Manual Mode below\n\n`;
+          if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            errorMsg += `**Network Error:** Browser could not reach ClickUp.\n\n`;
           } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
             errorMsg += `**Invalid API Token:** Please check your ClickUp API token.\n\n`;
           } else {
@@ -653,7 +643,7 @@
       addMessage(projectName, 'user');
       taskData.project_name = projectName;
       taskData.project_id   = projectId;
-      
+
       let listId = projectId;
 
       if (!projectName.includes(' / ')) {
@@ -686,8 +676,6 @@
       }
     }
 
-    // --- Dynamic Custom Fields ---
-
     async function loadCustomFields(listId) {
       availableCustomFields = [];
       customFieldValuesById = {};
@@ -696,7 +684,6 @@
       try {
         console.log(`Fetching custom fields for list ID: ${listId}`);
         
-        // list-level
         try {
           const listResp = await clickupAPI(`/list/${listId}/field`);
           console.log('List-level custom fields API response:', listResp);
@@ -718,7 +705,6 @@
           console.warn('Could not fetch list-level fields:', e);
         }
         
-        // space-level
         if (taskData.space_id) {
           try {
             const spaceResp = await clickupAPI(`/space/${taskData.space_id}/field`);
@@ -742,7 +728,6 @@
           }
         }
         
-        // team-level
         if (clickupData.team && clickupData.team.id) {
           try {
             const teamResp = await clickupAPI(`/team/${clickupData.team.id}/field`);
@@ -768,7 +753,6 @@
         
         console.log(`Found ${allFields.length} total fields (before filtering)`);
         
-        // dedupe
         const uniqueFields = [];
         const seenIds = new Set();
         for (const field of allFields) {
@@ -778,7 +762,6 @@
           }
         }
         
-        // filter
         availableCustomFields = uniqueFields
           .filter(f => {
             const type = (f.type || '').toLowerCase();
@@ -810,8 +793,6 @@
         }
       } catch (e) {
         console.error(`Failed to load custom fields for list ${listId}:`, e);
-        console.error('Error details:', e.message);
-        console.error('Full error:', e);
         availableCustomFields = [];
       }
       startCustomFieldFlow();
@@ -828,7 +809,7 @@
       setInput(false, 'Use buttons below...');
 
       const container = document.createElement('div');
-      let html = '<p>Select a **Custom Field** to fill (or click \"Done\"):</p>';
+      let html = '<p>Select a **Custom Field** to fill (or click "Done"):</p>';
       html += '<div class="option-grid">';
 
       availableCustomFields.forEach(f => {
@@ -1243,9 +1224,7 @@
           <p><strong>Attachments:</strong> ${
             Array.isArray(taskData.attachments) && taskData.attachments.length
               ? taskData.attachments.map(url => {
-                  if (url.startsWith('data:')) {
-                    return '📎 [Uploaded File]';
-                  }
+                  if (url.startsWith('data:')) return '📎 [Uploaded File]';
                   return url.length > 50 ? url.substring(0, 50) + '...' : url;
                 }).join(', ')
               : 'None'
@@ -1290,7 +1269,6 @@
       if (Array.isArray(currentValue)) {
         currentValue = currentValue.join(', ');
       }
-
       currentValue = currentValue || 'None';
 
       if (step.type === 'select' && dataLoaded) {
@@ -1461,9 +1439,7 @@
           }
         }
 
-        const webhookUrl = CORS_PROXY
-          ? `${CORS_PROXY}${encodeURIComponent(N8N_WEBHOOK_URL)}`
-          : N8N_WEBHOOK_URL;
+        const webhookUrl = N8N_WEBHOOK_URL;
 
         const response = await fetch(webhookUrl, {
           method: 'POST',
@@ -1567,4 +1543,3 @@
   </script>
 </body>
 </html>
-
